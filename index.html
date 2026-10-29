@@ -778,12 +778,19 @@
                 <h3 class="text-lg font-bold text-stone-900 flex items-center gap-2">
                     <i data-lucide="folder-cog" class="w-5 h-5 text-cozy-500"></i> Manage Categories & Subcategories
                 </h3>
-                <p class="text-xs text-stone-500 mt-0.5">Add or remove main product lines and sub-types.</p>
+                <p class="text-xs text-stone-500 mt-0.5">Add, edit, rename, or remove main product lines and sub-types.</p>
             </div>
 
             <div class="space-y-2">
                 <label class="block text-xs font-bold text-stone-700 uppercase tracking-wider">Main Categories</label>
                 <div id="categoryChipContainer" class="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-2 bg-stone-50 rounded-2xl border border-stone-200"></div>
+
+                <div class="flex gap-2 pt-1">
+                    <input type="text" id="newCategoryInput" placeholder="New main category name..." class="flex-1 p-2 border border-stone-200 rounded-xl text-xs focus:ring-2 focus:ring-cozy-400 focus:outline-none">
+                    <button type="button" onclick="addNewCategoryFromManager()" class="px-3 py-2 bg-cozy-500 hover:bg-cozy-600 text-white font-bold rounded-xl text-xs shadow-2xs">
+                        + Add Category
+                    </button>
+                </div>
             </div>
 
             <div class="space-y-3 pt-2 border-t border-stone-100">
@@ -1839,7 +1846,6 @@
                 let stockDisplay = '';
                 let statusBadge = '';
                 const isExpanded = !!expandedOptionsMap[p.id];
-                const isRestockExpanded = !!expandedRestockMap[p.id];
 
                 // Calculate stock counts accurately
                 let effectiveTotalStock = 0;
@@ -3549,6 +3555,7 @@
         function closeCategoryManagerModal() {
             document.getElementById('categoryManagerModal').classList.add('hidden');
             renderCategoryOptions();
+            renderApp();
         }
 
         function renderCategoryManagerChips() {
@@ -3559,13 +3566,82 @@
             const cats = Object.keys(categoriesData);
 
             container.innerHTML = cats.map(c => `
-                <div class="px-3 py-1 bg-white border border-stone-200 rounded-xl text-xs font-bold flex items-center gap-2">
-                    <span>${c}</span>
+                <div class="px-3 py-1 bg-white border border-stone-200 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs">
+                    <span class="text-stone-800">${c}</span>
+                    <button onclick="editCategoryName('${c}')" class="text-stone-400 hover:text-cozy-600 transition p-0.5" title="Rename Category">
+                        <i data-lucide="edit-2" class="w-3 h-3"></i>
+                    </button>
+                    <button onclick="deleteMainCategory('${c}')" class="text-stone-300 hover:text-rose-600 transition p-0.5" title="Delete Category">
+                        <i data-lucide="x" class="w-3 h-3"></i>
+                    </button>
                 </div>
             `).join('');
 
             selector.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
             renderManagerSubcategoryChips();
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function addNewCategoryFromManager() {
+            const input = document.getElementById('newCategoryInput');
+            if (!input) return;
+            const newCat = input.value.trim();
+
+            if (newCat) {
+                if (!categoriesData[newCat]) {
+                    categoriesData[newCat] = [];
+                    saveStateToStorage();
+                    input.value = '';
+                    renderCategoryManagerChips();
+                    showToast(`Added main category "${newCat}"`);
+                } else {
+                    showToast('Category already exists', 'error');
+                }
+            }
+        }
+
+        function editCategoryName(oldCat) {
+            const newCat = prompt(`Rename category "${oldCat}" to:`, oldCat);
+            if (!newCat) return;
+
+            const trimmed = newCat.trim();
+            if (!trimmed || trimmed === oldCat) return;
+            if (Object.prototype.hasOwnProperty.call(categoriesData, trimmed)) {
+                showToast('A category with that name already exists', 'error');
+                return;
+            }
+
+            categoriesData[trimmed] = categoriesData[oldCat] || [];
+            delete categoriesData[oldCat];
+
+            products.forEach(product => {
+                if (product.category === oldCat) product.category = trimmed;
+            });
+
+            saveStateToStorage();
+            renderCategoryManagerChips();
+            showToast(`Renamed to "${trimmed}"`);
+        }
+
+        function deleteMainCategory(catName) {
+            if (!Object.prototype.hasOwnProperty.call(categoriesData, catName)) return;
+            if (Object.keys(categoriesData).length <= 1) {
+                showToast('Keep at least one main category', 'error');
+                return;
+            }
+
+            const assignedProducts = products.filter(product => product.category === catName).length;
+            if (assignedProducts > 0) {
+                showToast(`Move the ${assignedProducts} product(s) in this category before deleting it`, 'error');
+                return;
+            }
+
+            if (confirm(`Are you sure you want to delete category "${catName}"?`)) {
+                delete categoriesData[catName];
+                saveStateToStorage();
+                renderCategoryManagerChips();
+                showToast(`Deleted category "${catName}"`);
+            }
         }
 
         function renderManagerSubcategoryChips() {
@@ -3582,11 +3658,43 @@
             }
 
             container.innerHTML = subcats.map((sub, idx) => `
-                <div class="px-2.5 py-1 bg-cozy-50 border border-cozy-200 text-cozy-800 rounded-xl text-xs font-bold flex items-center gap-1.5">
+                <div class="px-2.5 py-1 bg-cozy-50 border border-cozy-200 text-cozy-800 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs">
                     <span>${sub}</span>
-                    <button onclick="removeSubcategory('${selectedCat}', ${idx})" class="text-cozy-600 hover:text-cozy-900">&times;</button>
+                    <button onclick="editSubcategoryName('${selectedCat}', ${idx})" class="text-cozy-400 hover:text-cozy-800 transition p-0.5" title="Rename Subcategory">
+                        <i data-lucide="edit-2" class="w-3 h-3"></i>
+                    </button>
+                    <button onclick="removeSubcategory('${selectedCat}', ${idx})" class="text-cozy-600 hover:text-rose-600 transition p-0.5" title="Delete Subcategory">
+                        <i data-lucide="x" class="w-3 h-3"></i>
+                    </button>
                 </div>
             `).join('');
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function editSubcategoryName(category, index) {
+            const currentSub = categoriesData[category][index];
+            const newSub = prompt(`Rename subcategory "${currentSub}" to:`, currentSub);
+
+            if (!newSub) return;
+
+            const trimmed = newSub.trim();
+            if (!trimmed || trimmed === currentSub) return;
+            if (categoriesData[category].some((subcategory, subcategoryIndex) => subcategoryIndex !== index && subcategory === trimmed)) {
+                showToast('A subcategory with that name already exists', 'error');
+                return;
+            }
+
+            categoriesData[category][index] = trimmed;
+
+            products.forEach(product => {
+                if (product.category === category && product.subcategory === currentSub) {
+                    product.subcategory = trimmed;
+                }
+            });
+
+            saveStateToStorage();
+            renderManagerSubcategoryChips();
+            showToast(`Renamed subcategory to "${trimmed}"`);
         }
 
         function addNewSubcategoryFromManager() {
@@ -3610,11 +3718,18 @@
         }
 
         function removeSubcategory(category, index) {
-            if (categoriesData[category]) {
-                categoriesData[category].splice(index, 1);
-                saveStateToStorage();
-                renderManagerSubcategoryChips();
+            if (!categoriesData[category]) return;
+
+            const subcategory = categoriesData[category][index];
+            const assignedProducts = products.filter(product => product.category === category && product.subcategory === subcategory).length;
+            if (assignedProducts > 0) {
+                showToast(`Move the ${assignedProducts} product(s) in this subcategory before deleting it`, 'error');
+                return;
             }
+
+            categoriesData[category].splice(index, 1);
+            saveStateToStorage();
+            renderManagerSubcategoryChips();
         }
 
         // BACKUP & RESET DATA FUNCTIONS
