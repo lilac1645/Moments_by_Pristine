@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isActiveStaff() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/staff/$(request.auth.uid))
+        && get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.active == true;
+    }
+
+    match /staff/{staffUid} {
+      allow get: if request.auth != null && request.auth.uid == staffUid;
+      allow list, create, update, delete: if false;
+    }
+
+    match /artifacts/{appId}/public/data/storeState/main {
+      allow read, write: if isActiveStaff();
+    }
+  }
+}

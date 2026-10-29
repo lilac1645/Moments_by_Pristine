@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.DS_Store
+.env
+.env.*
+!.env.example
+.firebase/
+firebase-debug.log
+moments_pristine_backup_2026-10-28.json
