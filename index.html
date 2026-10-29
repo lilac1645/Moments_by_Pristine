@@ -1269,7 +1269,7 @@
         }
 
         window.syncStateToCloud = async function() {
-            if (!currentUser || !isFirebaseActive) return;
+            if (!currentUser || !isFirebaseActive) return false;
             updateCloudBadge('syncing', 'Syncing...');
             try {
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'storeState', 'main');
@@ -1282,9 +1282,11 @@
                     lastUpdated: new Date().toISOString()
                 }, { merge: true });
                 updateCloudBadge('connected', 'Cloud Synced');
+                return true;
             } catch (err) {
                 console.error("Cloud sync save error:", err);
                 updateCloudBadge('error', 'Sync Failed');
+                return false;
             }
         };
 
@@ -1357,16 +1359,15 @@
             categoriesData = storedCategories ? JSON.parse(storedCategories) : JSON.parse(JSON.stringify(defaultCategoriesMap));
         }
 
-        function saveStateToStorage() {
+        function saveStateToStorage(syncCloud = true) {
             localStorage.setItem('mbp_clean_products', JSON.stringify(products));
             localStorage.setItem('mbp_clean_deliveries', JSON.stringify(deliveries));
             localStorage.setItem('mbp_clean_activities', JSON.stringify(activities));
             localStorage.setItem('mbp_clean_sales', JSON.stringify(salesHistory));
             localStorage.setItem('mbp_clean_categories_map', JSON.stringify(categoriesData));
 
-            if (typeof window.syncStateToCloud === 'function') {
-                window.syncStateToCloud();
-            }
+            if (syncCloud && typeof window.syncStateToCloud === 'function') return window.syncStateToCloud();
+            return Promise.resolve(true);
         }
 
         function updateLowStockBadge() {
@@ -3623,7 +3624,7 @@
             showToast(`Renamed to "${trimmed}"`);
         }
 
-        function deleteMainCategory(catName) {
+        async function deleteMainCategory(catName) {
             if (!Object.prototype.hasOwnProperty.call(categoriesData, catName)) return;
             if (Object.keys(categoriesData).length <= 1) {
                 showToast('Keep at least one main category', 'error');
@@ -3637,8 +3638,18 @@
             }
 
             if (confirm(`Are you sure you want to delete category "${catName}"?`)) {
+                const previousSubcategories = categoriesData[catName];
                 delete categoriesData[catName];
-                saveStateToStorage();
+
+                const saved = await saveStateToStorage();
+                if (!saved) {
+                    categoriesData[catName] = previousSubcategories;
+                    saveStateToStorage(false);
+                    renderCategoryManagerChips();
+                    showToast('Category could not be synced. It has been restored.', 'error');
+                    return;
+                }
+
                 renderCategoryManagerChips();
                 showToast(`Deleted category "${catName}"`);
             }
