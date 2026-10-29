@@ -1280,7 +1280,7 @@
                     salesHistory,
                     categoriesData,
                     lastUpdated: new Date().toISOString()
-                }, { merge: true });
+                });
                 updateCloudBadge('connected', 'Cloud Synced');
                 return true;
             } catch (err) {
